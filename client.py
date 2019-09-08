@@ -48,15 +48,32 @@ class Client:
                             file_transfer.close()
                             self.client_session.send("FIN".encode())
                 if command[0] == "put":
+                    finish = False
                     if not os.path.isfile(command[1]):
                         self.client_session.send("NOT_FOUND".encode())
                     else:
                         self.client_session.send("FOUND".encode())
-                    if self.client_session.recv(1024).decode() == "HAVE_EQUAL":
-                        input("Deseja sobrescrever o arquivo?(y/n)")
-                        
-
-
+                        if self.client_session.recv(1024).decode() == "HAVE_EQUAL":
+                            if input("Deseja sobrescrever o arquivo?(y/n)") != "y":
+                                self.client_session.send("ABORT".encode())
+                                finish = True
+                            else:
+                                self.client_session.send("OK".encode())
+                        else:
+                            self.client_session.send("OK".encode())
+                        if not finish:
+                            self.client_session.recv(1024)
+                            file_tranfer = open(command[1],'rb')
+                            size = os.path.getsize(command[1])
+                            packets = int(size/1024)
+                            if size%1024!=0:
+                                packets += 1
+                            self.client_session.send(str(packets).encode())
+                            self.client_session.recv(1024)
+                            for _ in range(packets):
+                                part_file = file_tranfer.read(1024)
+                                self.client_session.send(part_file)
+                            file_tranfer.close()
                 response = self.client_session.recv(1024)
                 print (response.decode(), end= '')
                 if command[0] == "quit":

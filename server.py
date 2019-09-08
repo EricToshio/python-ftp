@@ -36,7 +36,7 @@ class Server:
     def get_cred(self)->dict:
         #file = input("Arquivo com credenciais:")
         ###################REMOVER###############
-        file = "/home/toshio/Documents/projects/python-ftp/credential.csv"
+        file = "/home/toshio/Documents/projetos/python-ftp/credential.csv"
         #########################################
         while not os.path.isfile(file):
             file = input("arquivo inexistente\nEscreva o nome deoutro arquivo:")
@@ -143,18 +143,28 @@ class Server:
                         else:
                             output = "ERRO: operacao cancelada pelo usuario"
                 elif first_command == "put":
+                    finish = False
                     if conn.recv(1024).decode() == "NOT_FOUND":
                         output = "ERRO: arquivo nao encontrado"
                     else:
-                        if os.path.isfile(command[1]):
+                        if os.path.isfile(dir_actual+command[1]):
                             conn.send("HAVE_EQUAL".encode())
+                            if conn.recv(1024).decode() == "ABORT":
+                                output = "ERRO: operacao cancelada pelo usuario"
+                                finish = True
                         else:
-                            conn.send("NOT_HAVE_EQUAL".encode())
-                        if conn.recv(1024).decode() == "ABORT":
-                            output = "ERRO: operacao cancelada pelo usuario"
-                        else:
-                            
-
+                            conn.send("HAVE_NOT_EQUAL".encode())
+                            conn.recv(1024)
+                        if not finish:
+                            conn.send("SIZE".encode())
+                            packets = int(conn.recv(1024).decode())
+                            conn.send("OK".encode())
+                            file_transfer = open(dir_actual+command[1], 'wb')
+                            for _ in range(packets):
+                                data = conn.recv(1024)
+                                file_transfer.write(data)
+                            file_transfer.close()
+                            output = "arquivo transferido com sucesso"
                 elif first_command == "remove":
                     if len(command) != 2:
                         output = "ERRO: numero de argumentos errado"
