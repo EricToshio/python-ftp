@@ -1,5 +1,6 @@
 # Library
 from socket import *
+import os
 
 class Client:
     def __init__(self):
@@ -11,6 +12,7 @@ class Client:
     def connect(self, serverName, serverPort = 2121):
         # Connect
         clientSocket = socket(AF_INET, SOCK_STREAM)
+        clientSocket.setsockopt(SOL_SOCKET,SO_REUSEADDR,1)
         clientSocket.connect((serverName,serverPort))
         self.client_session = clientSocket
         self.is_connected = True
@@ -22,15 +24,46 @@ class Client:
         while running:
             if self.is_connected:
                 text = input()
-                command = text.split(' ')[0]
+                command = text.split(' ')
                 self.client_session.send(text.encode())
+                if command[0] == "get":
+                    response = self.client_session.recv(1024)
+                    if response.decode() == "OK":
+                        abort = False
+                        if os.path.isfile(command[1]):
+                            res = input("Deseja sobrescrever o arquivo existente?(y/n)\n")
+                            if res != "y":
+                                abort = True
+                        if abort:
+                            self.client_session.send("ABORT".encode())
+                        else:
+                            self.client_session.send("SIZE".encode())
+                            response = self.client_session.recv(1024)
+                            self.client_session.send("FILE".encode())
+                            packets = int(response.decode())
+                            file_transfer = open(command[1], 'wb')
+                            for _ in range(packets):
+                                data = self.client_session.recv(1024)
+                                file_transfer.write(data)
+                            file_transfer.close()
+                            self.client_session.send("FIN".encode())
+                if command[0] == "put":
+                    if not os.path.isfile(command[1]):
+                        self.client_session.send("NOT_FOUND".encode())
+                    else:
+                        self.client_session.send("FOUND".encode())
+                    if self.client_session.recv(1024).decode() == "HAVE_EQUAL":
+                        input("Deseja sobrescrever o arquivo?(y/n)")
+                        
+
+
                 response = self.client_session.recv(1024)
                 print (response.decode(), end= '')
-                if command == "quit":
+                if command[0] == "quit":
                     self.close()
                     running = False
-                elif command == "close":
-                    self.close()
+                elif command[0] == "close":
+                    self.close()                    
             else:
                 text = input(">>> ")
                 command = text.split(' ')[0]
