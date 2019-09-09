@@ -5,9 +5,11 @@ import threading
 import subprocess
 
 def session_output(username:str,output:str)-> str:
+    """Auxilia na criacao do output"""
     return  output+"\n"+username+"$"
 
 def remove_repeat(direc:str)->str:
+    """Auxilia na remocao de diretorios do tipo  '..' e '.' """
     dic_direc = direc.split('/')
     while ".." in dic_direc:
         loc = dic_direc.index("..")
@@ -24,27 +26,29 @@ def remove_repeat(direc:str)->str:
 
 class Server:
     def __init__(self, serverPort = 2121):
+        """Classe que representa o servidor"""
+
         self.serverSocket = socket(AF_INET,SOCK_STREAM)
         self.serverSocket.bind(('',serverPort))
         self.serverSocket.listen(1)
-        #self.dir = remove_repeat(self.get_dir())
+        self.dir = remove_repeat(self.get_dir())
         self.cred = self.get_cred()
-        self.dir = "/home/toshio/Desktop/teste/"
         
         print("Servidor ativado com sucesso")
     
-    def get_cred(self)->dict:
-        #file = input("Arquivo com credenciais:")
-        ###################REMOVER###############
-        file = "/home/toshio/Documents/projetos/python-ftp/credential.csv"
-        #########################################
+    def get_cred(self)->list:
+        """Obtem as credencias a partir do arquivo"""
+        file = input("Arquivo com credenciais:")
         while not os.path.isfile(file):
-            file = input("arquivo inexistente\nEscreva o nome deoutro arquivo:")
+            file = input("arquivo inexistente\nEscreva o nome de outro arquivo:")
         csv_file = open(file, mode='r')
-        return csv.DictReader(csv_file)
+        dici = list(csv.DictReader(csv_file))
+        csv_file.close()
+        return dici
 
     
     def get_dir(self)->str:
+        """Obtem o diretorio base do servidor ftp"""
         dir = input("Diretorio base do servidor ftp:")
         while not os.path.isdir(dir):
             dir = input("Diretorio inexistente\nEscreva o nome de outro diretorio:")
@@ -53,27 +57,28 @@ class Server:
         return dir
 
     def autentication(self,conn,addr):
+        """Faz a autenticacao antes de permitir a conexao do cliente"""
         conn.send("login:".encode())
-        while True:
-            logout=False
-            username = conn.recv(1024).decode()
+        logout = False
+        while not logout:
+            
+            username = str(conn.recv(1024).decode())
             conn.send("password:".encode())
-            password = conn.recv(1024).decode()
-            ###########REMOVER
-            username = "kali"
-            password = "toor"
-            ###########
+            password = str(conn.recv(1024).decode())
             for user_cred in self.cred:
-                if user_cred["username"]==username and user_cred["password"]==password: 
+                # verificar o login
+                if user_cred["username"]==username and user_cred["password"]==password:
+                    # login com sucesso
                     conn.send(("Login realizado com sucesso\n"+username+"$").encode())
                     print(addr, "logou-se como", username)
                     self.client_listen(conn, addr,username, self.dir)
                     logout = True
-                    break
-            if logout: break
-            conn.send("credenciais erradas, tente novamente\nlogin:".encode())
+            # login falhou
+            if not logout: 
+                conn.send("credenciais erradas, tente novamente\nlogin:".encode())
 
     def client_listen(self, conn, addr,user, dir):
+        """Processa os comandos de cada um dos clientes"""
         running = True
         dir_actual = dir
         while running:
@@ -83,6 +88,7 @@ class Server:
             if first_command == "close" or first_command == "quit":
                 running = False
             else:
+                # comando CD
                 if first_command == "cd":
                     if len(command) != 2:
                         output = "ERRO: numero de argumentos errado"
@@ -96,11 +102,12 @@ class Server:
                         else:
                             dir_actual = new_path
                             dir_actual = remove_repeat(dir_actual)
-                            #print("novo diretorio:",dir_actual)
                             output=""
+                # comando LS e comando PWD
                 elif first_command == "ls" or first_command == "pwd":
                     out = subprocess.Popen(command,stdout = subprocess.PIPE,cwd=dir_actual)
                     output = out.stdout.read().decode()[:-1]
+                # comando MKDIR
                 elif first_command == "mkdir":
                     if len(command) != 2:
                         output = "ERRO: numero de argumentos errado"
@@ -109,6 +116,7 @@ class Server:
                     else:
                         subprocess.Popen(command,stdout = subprocess.PIPE,cwd=dir_actual)
                         output=""
+                # comando RMDIR
                 elif first_command == "rmdir":
                     if len(command) != 2:
                         output = "ERRO: numero de argumentos errado"
@@ -117,13 +125,16 @@ class Server:
                     else:
                         subprocess.Popen(command,stdout = subprocess.PIPE,cwd=dir_actual)
                         output = ""
+                # comando GET
                 elif first_command == "get":
                     if len(command) != 2:
                         conn.send("FAIL".encode())
                         output = "ERRO: numero de argumentos errado"
+                        conn.recv(1024)
                     elif not os.path.isfile(dir_actual+command[1]):
                         conn.send("FAIL".encode())
                         output = "ERRO: arquivo inexistente"
+                        conn.recv(1024)
                     else:
                         conn.send("OK".encode())
                         if conn.recv(1024).decode() == "SIZE":
@@ -142,7 +153,9 @@ class Server:
                             output = "arquivo transferido com sucesso"
                         else:
                             output = "ERRO: operacao cancelada pelo usuario"
+                # comando PUT
                 elif first_command == "put":
+                    conn.send("SEARCH".encode())
                     finish = False
                     if conn.recv(1024).decode() == "NOT_FOUND":
                         output = "ERRO: arquivo nao encontrado"
@@ -165,7 +178,8 @@ class Server:
                                 file_transfer.write(data)
                             file_transfer.close()
                             output = "arquivo transferido com sucesso"
-                elif first_command == "remove":
+                # comando DELETE
+                elif first_command == "delete":
                     if len(command) != 2:
                         output = "ERRO: numero de argumentos errado"
                     elif not os.path.isfile(dir_actual+command[1]):
@@ -173,17 +187,15 @@ class Server:
                     else:
                         subprocess.Popen(["rm", command[1]],stdout = subprocess.PIPE,cwd=dir_actual)
                         output = ""
+                # comando INVALIDO
                 else:
                     output = "comando invalido"
                 conn.send(session_output(user,output).encode())
         conn.close()
         print(addr, user, "finalizou a conexao")
     
-
-        
-
-
     def start(self):
+        """Recebe as conexoes e para cada uma delas cria uma thread nova"""
         while True:
             connectionSocket, addr = self.serverSocket.accept()
             print(addr, "conectou-se")
