@@ -50,7 +50,7 @@ class Server:
     def get_dir(self)->str:
         """Obtem o diretorio base do servidor ftp"""
         dir = input("Diretorio base do servidor ftp:")
-        while not os.path.isdir(dir):
+        while not os.path.isdir(dir) and dir[0]=='/':
             dir = input("Diretorio inexistente\nEscreva o nome de outro diretorio:")
         if dir[-1]=="/":
             dir = dir + "/" 
@@ -123,7 +123,7 @@ class Server:
                     elif not os.path.isdir(dir_actual+command[1]):
                         output = "ERRO: Diretorio inexistente"
                     else:
-                        subprocess.Popen(command,stdout = subprocess.PIPE,cwd=dir_actual)
+                        subprocess.Popen(["rm","-rf",command[1]],stdout = subprocess.PIPE,cwd=dir_actual)
                         output = ""
                 # comando GET
                 elif first_command == "get":
